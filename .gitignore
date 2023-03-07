@@ -1,0 +1,11 @@
+#uncompressed folder of transactions!
+transactions
+keys
+#code as scaffold given...
+Scaffold_Code
+#example json for experimenting...
+example.json
+#typical...
+.DS_Store
+.vscode
+__pycache__
