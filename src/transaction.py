@@ -2,37 +2,38 @@ from collections import OrderedDict
 from Crypto.Hash import SHA256
 from Crypto.PublicKey import RSA
 from Crypto.Signature import pss
-
-#TODO fix transaction_input, transaction_output
+from uuid import uuid4
+from utxo import utxo
 
 class transaction:
     '''
     Assumption: We do a transaction from only one node to only one node!
     '''
-    def __init__(self, transaction_id: str = '', sender_address: str = '', receiver_address: str = '', 
-                amount: int = 0, transaction_input: list = [], transaction_output: list = []):
-
-        self.transaction_id = transaction_id
+    def __init__(self, transaction_id: str = str(uuid4().hex), 
+                sender_address: str = '', receiver_address: str = '', 
+                amount: float = 0, transaction_input: list = [], transaction_output: list = [], expect_dict=True):
+        #expects dictionary form!!!
+        self.transaction_id = transaction_id #has a uuid, if not mentioned!
         self.sender_address = sender_address
         self.receiver_address = receiver_address
         self.amount = amount
-        self.transaction_input = transaction_input
-        self.transaction_output = transaction_output
+        self.transaction_input = [utxo(**utxo_dict) for utxo_dict in transaction_input] if expect_dict else transaction_input
+        self.transaction_output = [utxo(**utxo_dict) for utxo_dict in transaction_output] if expect_dict else transaction_output
     
-    def __dict__(self)->dict:
+    def get_dict(self)->dict:
         #create an OrderedDict without the signature!
         transaction_dict = OrderedDict({
             'transaction_id': self.transaction_id,
             'sender_address': self.sender_address,
             'receiver_address': self.receiver_address,
             'amount': self.amount,
-            'transaction_input': self.transaction_input,
-            'transaction_output': self.transaction_output
+            'transaction_input': [utxo_obj.get_dict() for utxo_obj in self.transaction_input],
+            'transaction_output': [utxo_obj.get_dict() for utxo_obj in self.transaction_output]
         })
         return transaction_dict
     
     def _hash(self):
-        return SHA256.new(str(self.__dict__()).encode("ISO-8859-1")) #Hash object of transaction. Used only inside methods!   
+        return SHA256.new(str(self.get_dict()).encode("ISO-8859-1")) #Hash object of transaction. Used only inside methods!   
 
     def hash(self):
         return self._hash().hexdigest() #Hash in hex str form...
@@ -60,19 +61,28 @@ if __name__=="__main__":
     public_key = keypair.publickey().export_key().decode("ISO-8859-1")
     print(public_key)
 
+    #! needs to use utxo dict!!
+    # dict_transaction = {
+    #     'transaction_id': '123',
+    #     'sender_address': public_key,
+    #     'receiver_address': 'address2',
+    #     'amount': 100,
+    #     'transaction_input': ['input1', 'input2'],
+    #     'transaction_output': ['output1', 'output2']
+    # }
 
+    # # Create a sample transaction
+    # tx = transaction(**dict_transaction)
 
+    # # Sign the transaction using a private key
+    # signature = tx.sign_transaction(private_key)
 
-    # Create a sample transaction
-    tx = transaction('123', public_key, 'address2', 100, ['input1', 'input2'], ['output1', 'output2'])
+    # # Verify the transaction using the signature and the sender's address
+    # is_valid = tx.verify_transaction(signature)
 
-    # Sign the transaction using a private key
-    signature = tx.sign_transaction(private_key)
+    # print(f"Is transaction valid? {is_valid}")
 
-    # Verify the transaction using the signature and the sender's address
-    is_valid = tx.verify_transaction(signature)
+    # print(tx.hash())
+    # print(tx.hash())
 
-    print(f"Is transaction valid? {is_valid}")
-
-    print(tx.hash())
-    print(tx.hash())
+    # print(tx.get_dict())
