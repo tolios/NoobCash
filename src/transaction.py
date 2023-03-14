@@ -55,34 +55,67 @@ class transaction:
             return False
          
 if __name__=="__main__":
+    from json import dumps
 
     keypair = RSA.generate(2048)
     private_key = keypair.export_key().decode("ISO-8859-1")
     public_key = keypair.publickey().export_key().decode("ISO-8859-1")
     print(public_key)
 
-    #! needs to use utxo dict!!
-    # dict_transaction = {
-    #     'transaction_id': '123',
-    #     'sender_address': public_key,
-    #     'receiver_address': 'address2',
-    #     'amount': 100,
-    #     'transaction_input': ['input1', 'input2'],
-    #     'transaction_output': ['output1', 'output2']
-    # }
+    tx_id = 'diuewh3oijh'
 
-    # # Create a sample transaction
-    # tx = transaction(**dict_transaction)
+    #tx: 10 -(9)-> 9, 1
 
-    # # Sign the transaction using a private key
-    # signature = tx.sign_transaction(private_key)
+    utxo_input = {
+        'id': '221121',
+        'tx_id': "ukdewhowi2",
+        'address': public_key,
+        'amount': 10
+    }
 
-    # # Verify the transaction using the signature and the sender's address
-    # is_valid = tx.verify_transaction(signature)
+    utxo_output1 = {
+        'id': '029ue',
+        'tx_id': tx_id,
+        'address': "knedndl3w",
+        'amount': 9
+    }
 
-    # print(f"Is transaction valid? {is_valid}")
+    utxo_output2 = {
+        'id': '2221',
+        'tx_id': tx_id,
+        'address': public_key,
+        'amount': 1
+    }
 
-    # print(tx.hash())
-    # print(tx.hash())
+    tx_dict = {
+        'transaction_id': tx_id,
+        'sender_address': public_key,
+        'receiver_address': 'knedndl3w',
+        'amount': 9,
+        'transaction_input': [utxo_input],
+        'transaction_output': [utxo_output1, utxo_output2]
+    }
 
-    # print(tx.get_dict())
+    tx = transaction(**tx_dict)
+
+    #sign tx
+    signature = tx.sign_transaction(private_key)
+
+    #verify signature
+    print(tx.verify_transaction(signature))
+
+    tx_dict_sent = tx.get_dict()
+
+    ########################## simulate sending transaction!
+
+    tx_received = transaction(**tx_dict_sent)
+
+    #verify signature
+    print(tx_received.verify_transaction(signature))
+
+    print(dumps(tx_received.get_dict()))
+
+
+
+
+

@@ -14,14 +14,17 @@ class block:
         self.nonce = nonce
         self.previous_block_hash = previous_block_hash
 
+    def __iter__(self):
+        return iter(self.transactions)
+
     def update_nonce(self):
         self.nonce += 1 #updates nonce for mining
     
     def __len__(self):
         return len(self.transactions)
 
-    def append(self, transaction: transaction):
-        self.transactions.append(transaction)
+    def append(self, tx: transaction, signature: str):
+        self.transactions.append({'transaction': tx, 'signature': signature})
 
     def get_dict(self)->dict:
         #create an OrderedDict without the hash! (OrderedDict needed to get same hash each time!)
@@ -41,15 +44,77 @@ class block:
         return self._hash().hexdigest() #Hash in hex str form...
 
 if __name__=="__main__":
+    from Crypto.PublicKey import RSA
+    from json import dumps
 
-    block1 = block(index = 0, previous_block_hash='eidhoi3hqioje')
+    # Transaction!
 
-    print(block1.hash())
-    n = 4
-    for i in range(115330):
-        b_hash = block1.hash()
-        if b_hash[:n] == "0"*n:
-            print(i)
-            print(b_hash)
-            break
-        block1.update_nonce() #mine
+    keypair = RSA.generate(2048)
+    private_key = keypair.export_key().decode("ISO-8859-1")
+    public_key = keypair.publickey().export_key().decode("ISO-8859-1")
+
+    tx_id = 'diuewh3oijh'
+
+    #tx: 10 -(9)-> 9, 1
+
+    utxo_input = {
+        'id': '221121',
+        'tx_id': "ukdewhowi2",
+        'address': public_key,
+        'amount': 10
+    }
+
+    utxo_output1 = {
+        'id': '029ue',
+        'tx_id': tx_id,
+        'address': "knedndl3w",
+        'amount': 9
+    }
+
+    utxo_output2 = {
+        'id': '2221',
+        'tx_id': tx_id,
+        'address': public_key,
+        'amount': 1
+    }
+
+    tx_dict = {
+        'transaction_id': tx_id,
+        'sender_address': public_key,
+        'receiver_address': 'knedndl3w',
+        'amount': 9,
+        'transaction_input': [utxo_input],
+        'transaction_output': [utxo_output1, utxo_output2]
+    }
+
+    tx = transaction(**tx_dict)
+
+    #sign tx
+    signature = tx.sign_transaction(private_key)
+
+    tx_dict_sent = tx.get_dict()
+
+    #block
+
+    block_dict = {
+        'index': 22,
+        'timestamp': int(time()),
+        'transactions' : [{'transaction': tx_dict_sent, 'signature': signature}],
+        'nonce' : 0,
+        'previous_block_hash': "1"
+    }
+
+    block1 = block(**block_dict)
+
+    hash_block = block1.hash()
+
+    print(hash_block)
+
+    block_dict_sent = block1.get_dict()
+    ###################
+
+    block2 = block(**block_dict_sent)
+
+    print(block2.hash())
+
+    print(dumps(block2.get_dict()))
