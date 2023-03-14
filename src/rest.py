@@ -14,6 +14,20 @@ app = Flask(__name__)
 CORS(app)
 cache = SimpleCache(default_timeout=0)
 
+# Create to_json method
+def to_json(self):
+    # create the json
+    json = self.__dict__.copy()
+    # return the json
+    return json
+
+# Create from_json method
+def from_json(json):
+    # create the object
+    obj = self.__class__(**json)
+    # return the object
+    return obj
+
 # Create get method
 @app.route('/get', methods=['GET'])
 def get():
