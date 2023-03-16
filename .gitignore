@@ -9,3 +9,4 @@ example.json
 .DS_Store
 .vscode
 __pycache__
+logs/*.log

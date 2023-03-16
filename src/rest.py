@@ -1,175 +1,76 @@
 import requests
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from werkzeug.contrib.cache import SimpleCache
-from utils import create_logger
-from node import Node
-from transaction import Transaction
-from block import Block
-from blockchain import Blockchain
+from node import node
+from transaction import transaction
+from block import block
+from blockchain import blockchain
+from argparse import ArgumentParser
+from time import sleep
 
-# ------------------------------ Bootstrapping --------------------------------
-logger = create_logger('rest')
+parser = ArgumentParser()
+parser.add_argument('--ip', default='127.0.0.1', type=str,
+                        help='ip of given node')
+parser.add_argument('--port', default=5000, type=int,
+                        help='port to listen on')
+parser.add_argument('-b', '-bootstrap', action='store_true',
+                        help='set if the current node is the bootstrap')
+args = parser.parse_args()
+
+#init node 
+app_node = node(id = 0 if args.b else None, ip = args.ip, port = args.port, bootstrap=args.b)
 app = Flask(__name__)
 CORS(app)
-cache = SimpleCache(default_timeout=0)
 
-# Create to_json method
-def to_json(self):
-    # create the json
-    json = self.__dict__.copy()
-    # return the json
-    return json
+@app.route("/")
+def index():
+    return app_node.contents()
 
-# Create from_json method
-def from_json(json):
-    # create the object
-    obj = self.__class__(**json)
-    # return the object
-    return obj
+@app.route("/set_id/<id>", methods=['POST'])
+def set_id(id = 0):
+    if app_node.id:
+        return 'Already set', 500
+    app_node.set_id(id)
+    return 'Setted', 200
 
-# Create get method
-@app.route('/get', methods=['GET'])
-def get():
-    # get the blockchain from the cache
-    blockchain = Blockchain.from_json(cache.get('blockchain'))
-    # return the blockchain as a json
-    return jsonify(blockchain.to_json())
+@app.route("/connect", methods=['POST'])
+def register_peer():
+    peer_details = request.get_json()
+    #set id as #of peer nodes (since 0 is an id it works)
+    app_node.register_peer(len(app_node.peers)+1, peer_details["ip"], peer_details["port"], peer_details["address"])
+    return 'registered!', 200
 
-# Create post method 
-@app.route('/post', methods=['POST'])
-def post():
-    # post the blockchain to the cache
-    data = request.get_json()
-    cache.set('blockchain', data)
-    # return the blockchain as a json
-    return jsonify(data)
+@app.route("/broadcast_peers", methods=['POST'])
+def broadcast_peers():
+    app_node.broadcast_peers()
+    return 'Broadcasted peers to everyone', 200
 
-# Create mine method
-@app.route('/mine', methods=['GET'])
-def mine():
-    # get the blockchain from the cache
-    blockchain = Blockchain.from_json(cache.get('blockchain'))
-    # mine the blockchain
-    blockchain.mine()
-    # update the cache
-    cache.set('blockchain', blockchain.to_json())
-    # return the blockchain as a json
-    return jsonify(blockchain.to_json())
+@app.route("/post_peers", methods=['POST'])
+def post_peers():
+    #this is activated for all other nodes!
+    peer_data = request.get_json()
+    for peer_id, peer_details in peer_data.items():
+        app_node.register_peer(peer_id, peer_details["ip"], peer_details["port"], peer_details["address"])
+    return 'peers received', 200
 
-# Create add transaction method
-@app.route('/add_transaction', methods=['POST'])
-def add_transaction():
-    # get the blockchain from the cache
-    blockchain = Blockchain.from_json(cache.get('blockchain'))
-    # get the transaction from the request
-    data = request.get_json()
-    transaction = Transaction.from_json(data)
-    # add the transaction to the blockchain
-    blockchain.add_transaction(transaction)
-    # update the cache
-    cache.set('blockchain', blockchain.to_json())
-    # return the blockchain as a json
-    return jsonify(blockchain.to_json())
+@app.route("/peers")
+def peers():
+    return app_node.peers
 
+#data = request.get_json()
 
-# Create add node method
-@app.route('/add_node', methods=['POST'])
-def add_node():
-    # get the node from the cache
-    node = Node.from_json(cache.get('node'))
-    # get the node from the request
-    data = request.get_json()
-    node = Node.from_json(data)
-    # add the node to the blockchain
-    blockchain = Blockchain.from_json(cache.get('blockchain'))
-    blockchain.add_node(node)
-    # update the cache
-    cache.set('blockchain', blockchain.to_json())
-    # return the blockchain as a json
-    return jsonify(blockchain.to_json())
+# # Create main method
+# def main(host = '', port = 5000):
+#     # run the app
+#     app.run(host=host, port=port)
 
-# Create replace chain method
-@app.route('/replace_chain', methods=['GET'])
-def replace_chain():
-    # get the blockchain from the cache
-    blockchain = Blockchain.from_json(cache.get('blockchain'))
-    # replace the chain
-    blockchain.replace_chain()
-    # update the cache
-    cache.set('blockchain', blockchain.to_json())
-    # return the blockchain as a json
-    return jsonify(blockchain.to_json())
+#initializations
 
-# Create update method
-def update():
-    # get the blockchain from the cache
-    blockchain = Blockchain.from_json(cache.get('blockchain'))
-    # update the blockchain
-    blockchain.update()
-    # update the cache
-    cache.set('blockchain', blockchain.to_json())
-    # return the blockchain as a json
-    return jsonify(blockchain.to_json())
+if not args.b:
+    #all other nodes post on bootstrap...
+    details = {"ip": app_node.ip, "port": app_node.port, "address": app_node.wallet.public_key}
+    requests.post('http://127.0.0.1:5000/connect', json=details)
+else:
+    pass
 
-# Create delete method
-def delete():
-    # delete the blockchain from the cache
-    cache.delete('blockchain')
-    # return notification
-    return jsonify('Blockchain deleted')
-
-# Create run method
-def run(host, port, node):
-    # add the node to the cache
-    cache.set('node', node.to_json())
-    # run the app
-    app.run(host=host, port=port)
-
-# Create bootstrap method
-def bootstrap(host, port, node):
-    # add the node to the cache
-    cache.set('node', node.to_json())
-    # run the app
-    app.run(host=host, port=port)
-
-# Create transfer method
-def transfer(host, port, node, recipient, amount):
-    # add the node to the cache
-    cache.set('node', node.to_json())
-    # create the transaction
-    transaction = Transaction(node.identifier, recipient, amount)
-    # create the request
-    url = 'http://{}:{}/add_transaction'.format(host, port)
-    headers = {'Content-Type': 'application/json'}
-    data = transaction.to_json()
-    # send the request
-    response = requests.post(url, headers=headers, json=data)
-    # return the response
-    return response
-
-# Create transactions method
-def transactions(host, port, node):
-    # add the node to the cache
-    cache.set('node', node.to_json())
-    # create the request
-    url = 'http://{}:{}/get'.format(host, port)
-    headers = {'Content-Type': 'application/json'}
-    # send the request
-    response = requests.get(url, headers=headers)
-    # return the response
-    return response
-
-# Create main method
-def main():
-    # run the app
-    app.run(host='
-            
-', port=5000)
-
-# Run the main method
-if __name__ == '__main__':
-    main()
-
-
-
+app.run(host = args.ip, port = args.port)

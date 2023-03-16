@@ -6,20 +6,46 @@ from block import block
 from transaction import transaction
 from wallet import Wallet
 from utxo import utxo
+import requests
+from time import sleep
 
 class node:
     #TODO Calculate throughtput and blocktime
     #TODO also add ip of node!
     #TODO what happens if same utxo same transaction id. Is it exploitable. If in the same block two transactions same id same utxo!
-    def __init__(self, id = 0, ip = '127.0.0.1', port = "5000", peers = {}, wallet = None, chain = dict()):
+    def __init__(self, id = None, ip = '127.0.0.1', port = "5000", peers = {}, wallet = None, chain = dict(), bootstrap = False):
         # id is the same as port for simplicity
         self.id = id
         self.ip = ip
         self.port = port
-        self.wallet = Wallet(**wallet) if wallet else self.create_wallet()
+        self.wallet = Wallet(**wallet) if wallet else self.create_wallet() 
         self.blockchain = blockchain(**chain)
         self.peers = peers
-        self.ip = f'http://localhost:{port}'
+        self.ip = ip
+        self.bootstrap = bootstrap
+
+    def set_id(self, id: int):
+        self.id = id
+
+    def contents(self):
+        #used for / endpoint...
+        return {
+            "id": self.id,
+            "ip": self.ip,
+            "port": self.port,
+            "public_key": self.wallet.public_key,
+            "bootstrap": self.bootstrap
+        }
+    
+    def broadcast_peers(self):
+        #once all the nodes have connected, simply run...
+        for peer_id, peer_details in self.peers.items():
+            relevant_peers = self.peers.copy() #get a copy of the dictionary
+            relevant_peers[self.id] = {'ip': self.ip, 'port': self.port, 'address': self.wallet.public_key}          
+            del relevant_peers[peer_id] #remove id of receiver (the receiver has it...)
+            requests.post(f"http://{peer_details['ip']}:{peer_details['port']}/post_peers", json=relevant_peers)
+            sleep(3.)
+            requests.post(f"http://{peer_details['ip']}:{peer_details['port']}/set_id/{peer_id}") #set id of node!
 
     def get_dict(self):
         return {
@@ -29,15 +55,18 @@ class node:
             "wallet": self.wallet.get_dict(),
             "chain": self.blockchain.get_dict(),
             "peers": self.peers,
+            "bootstrap": bootstrap
         }
     
     def genesis_utxos(self, entry_coins = 100):
         #this method will only be used ONCE for the bootstrap node...
         #Simply put, it will make N utxos, one for each node...
         #and put them to the wallet of the bootstrap node
+        if not self.bootstrap:
+            raise ValueError("Not the bootstrap")
         for _ in range(N):
             #create utxos for each node for the bootstrap wallet...
-            self.wallet.add_utxo(utxo(id = str(uuid4().hex), tx_id='init', address=self.wallet.public_key, amount=100))
+            self.wallet.add_utxo(utxo(id = str(uuid4().hex), tx_id='init', address=self.wallet.public_key, amount=entry_coins))
 
     def genesis_block(self):
         raise NotImplemented
