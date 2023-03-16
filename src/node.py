@@ -7,7 +7,7 @@ from transaction import transaction
 from wallet import Wallet
 from utxo import utxo
 import requests
-from time import sleep
+from time import sleep, time
 
 class node:
     #TODO Calculate throughtput and blocktime
@@ -64,12 +64,23 @@ class node:
         #and put them to the wallet of the bootstrap node
         if not self.bootstrap:
             raise ValueError("Not the bootstrap")
-        for _ in range(N):
+        for i in range(len(self.peers)): 
             #create utxos for each node for the bootstrap wallet...
-            self.wallet.add_utxo(utxo(id = str(uuid4().hex), tx_id='init', address=self.wallet.public_key, amount=entry_coins))
+            if i != (len(self.peers)-1):
+                self.wallet.add_utxo(utxo(id = str(uuid4().hex), tx_id='init', address=self.wallet.public_key, amount=entry_coins))
+            else:
+                #for the last utxo!
+                #for the change to register to all nodes!
+                self.wallet.add_utxo(utxo(id = str(uuid4().hex), tx_id='init', address=self.wallet.public_key, amount=2*entry_coins))
+        return entry_coins
 
     def genesis_block(self):
-        raise NotImplemented
+        #create utxos... entry_coins per node
+        g_block = block(timestamp=int(time()))
+        entry_coins = self.genesis_utxos()
+        for peer_details in self.peers.values():
+            g_block.append(*self.create_transaction(peer_details['address'], entry_coins)) #tuple so *
+        return g_block
     
     def register_peer(self, node_id, ip, port, address):
         self.peers[node_id] = {'ip': ip, 'port': port, 'address': address}
@@ -146,6 +157,8 @@ class node:
             if sender_utxo.id in self.wallet.spent:
                 if self.wallet.spent[sender_utxo.id] != tx.transaction_id:
                     return False #if it is spent in a different transaction than this...
+            else:
+                self.wallet.track_spent(sender_utxo.id, transaction_id=tx.transaction_id)
             #to check if valid in economy
             actual_amount += sender_utxo.amount
         #check transaction_output if valid...
@@ -182,8 +195,7 @@ class node:
             last = self.blockchain.last_block() #access last block in the chain...
             return block(self, index = last.index + 1, previous_block_hash = last.hash()) #empty block, nonce = 0
         else:
-            #only when block is genesis!!!
-            return block()
+            raise ValueError('Genesis elsewhere!')
     
     def validate_block(self, bl: block):
         '''

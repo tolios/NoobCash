@@ -15,7 +15,7 @@ def run(cmd: str, logfile: str):
     '''
     proc = Popen(cmd.split(),
                 stdout=open(logfile, 'w'),
-                stderr=DEVNULL)
+                stderr=DEVNULL) 
     return proc.pid
 
 def stop():
@@ -30,13 +30,41 @@ def stop():
                 kill(int(pid), SIGKILL)
                 print("Killed: "+pid)
 
-def init_nodes():
+def init_nodes(pid_file, num_nodes = 5):
     '''
         This function performs the initialization of nodes (locally).
     It activates the bootstrap, then each other node. It performs the
     genesis block, giving all the starting NBCs
     '''
-    raise NotImplemented
+    pid1 = run("python ./src/rest.py --port=5000 -b", 'logs/hi0.log')
+    pid_file.write(str(pid1)+'\n')
+    print(pid1)
+    sleep(3.)
+
+    pid2 = run("python ./src/rest.py --port=5001", 'logs/hi2.log')
+    print(pid2)
+    pid_file.write(str(pid2)+'\n')
+    sleep(3.)
+
+    pid3 = run("python ./src/rest.py --port=5002", 'logs/hi3.log')
+    print(pid3)
+    pid_file.write(str(pid3)+'\n')
+    sleep(3.)
+
+    pid4 = run("python ./src/rest.py --port=5003", 'logs/hi4.log')
+    print(pid4)
+    pid_file.write(str(pid4)+'\n')
+    sleep(3.)
+
+    pid5 = run("python ./src/rest.py --port=5004", 'logs/hi5.log')
+    print(pid5)
+    pid_file.write(str(pid5)+'\n')
+    sleep(3.)
+
+    requests.post('http://127.0.0.1:5000/broadcast_peers')
+    sleep(1.)
+    #make bootstrap start genesis...
+    requests.post('http://127.0.0.1:5000/genesis')
 
 
 if __name__=="__main__":
@@ -49,33 +77,9 @@ if __name__=="__main__":
 
     if not args.stop:
         with open(PID_FILE, mode='w') as pid_file:
+            #initialize all nodes and make genesis transactions!
+            init_nodes(pid_file, num_nodes=5)
 
-            pid1 = run("python ./src/rest.py --port=5000 -b", 'logs/hi0.log')
-            print(pid1)
-            pid_file.write(str(pid1)+'\n')
-            sleep(3.)
-
-            pid2 = run("python ./src/rest.py --port=5001", 'logs/hi2.log')
-            print(pid2)
-            pid_file.write(str(pid2)+'\n')
-            sleep(3.)
-
-            pid3 = run("python ./src/rest.py --port=5002", 'logs/hi3.log')
-            print(pid3)
-            pid_file.write(str(pid3)+'\n')
-            sleep(3.)
-
-            pid4 = run("python ./src/rest.py --port=5003", 'logs/hi4.log')
-            print(pid4)
-            pid_file.write(str(pid4)+'\n')
-            sleep(3.)
-
-            pid5 = run("python ./src/rest.py --port=5004", 'logs/hi5.log')
-            print(pid5)
-            pid_file.write(str(pid5)+'\n')
-            sleep(3.)
-
-            requests.post('http://127.0.0.1:5000/broadcast_peers')
 
     if args.stop:
         #stops all pids registered in PIDFILE

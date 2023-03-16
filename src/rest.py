@@ -57,14 +57,34 @@ def post_peers():
 def peers():
     return app_node.peers
 
-#data = request.get_json()
+@app.route("/genesis", methods=['POST'])
+def genesis():
+    #create genesis block...
+    g_block = app_node.genesis_block()
+    g_block_dict = g_block.get_dict()
+    for peer_details in app_node.peers.values():
+        requests.post(f"http://{peer_details['ip']}:{peer_details['port']}/genesis_block", json=g_block_dict)
+        sleep(1.)
+    print('hi genesis')
+    #update wallet...
+    app_node.wallet.update(g_block)
+    #add to blockchain!
+    app_node.blockchain.append(g_block)
+    return 'genesis init', 200
 
-# # Create main method
-# def main(host = '', port = 5000):
-#     # run the app
-#     app.run(host=host, port=port)
+@app.route("/genesis_block", methods = ["POST"])
+def genesis_block():
+    print('hi genesis block')
+    g_block = block(**request.get_json())
+    #update wallet...
+    app_node.wallet.update(g_block, genesis_ignore=True)
+    #add to blockchain!
+    app_node.blockchain.append(g_block)
+    return 'genesis block added...', 200
 
-#initializations
+@app.route("/wallet", methods = ["GET"])
+def get_wallet():
+    return app_node.wallet.get_dict()
 
 if not args.b:
     #all other nodes post on bootstrap...

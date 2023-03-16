@@ -51,14 +51,16 @@ class Wallet:
         result_dict['spent'] = self.spent
         return result_dict
     
-    def update(self, block):
+    def update(self, block, genesis_ignore = False):
         # Remove spent utxos and add new utxos from block transactions
         for transaction_dict in block.transactions:
             transaction = transaction_dict['transaction']
-            for tx_input in transaction.transaction_input:
-                #remove the utxo and remove it being spent
-                self.untrack_spent(tx_input.id)
-                self.remove_utxo(tx_input)
+            if not genesis_ignore:
+                #only when genesis happens for all nodes EXCEPT bootstrap
+                for tx_input in transaction.transaction_input:
+                    #remove the utxo and remove it being spent
+                    self.untrack_spent(tx_input.id)
+                    self.remove_utxo(tx_input)
             for tx_output in transaction.transaction_output:
                 self.add_utxo(tx_output)
 
