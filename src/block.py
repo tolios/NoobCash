@@ -13,9 +13,14 @@ class block:
                             for tx_dict in transactions]
         self.nonce = nonce
         self.previous_block_hash = previous_block_hash
+        self.set_tx_id = set([tx_dict['transaction'].transaction_id for tx_dict in self.transactions])
 
     def __iter__(self):
         return iter(self.transactions)
+    
+    def __contains__(self, tx_id: str):
+        #finds if it is contained in set of tx ids!
+        return self.set_tx_id.__contains__(tx_id)
 
     def update_nonce(self):
         self.nonce += 1 #updates nonce for mining
@@ -25,6 +30,7 @@ class block:
 
     def append(self, tx: transaction, signature: str):
         self.transactions.append({'transaction': tx, 'signature': signature})
+        self.set_tx_id.add(tx.transaction_id)
 
     def get_dict(self)->dict:
         #create an OrderedDict without the hash! (OrderedDict needed to get same hash each time!)

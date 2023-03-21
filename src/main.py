@@ -3,6 +3,7 @@ from signal import SIGKILL
 from os import kill
 from time import sleep
 import requests
+from config import N
 
 PID_FILE = "logs/pids.log"
 
@@ -36,39 +37,37 @@ def init_nodes(pid_file, num_nodes = 5):
     It activates the bootstrap, then each other node. It performs the
     genesis block, giving all the starting NBCs
     '''
-    pid1 = run("python ./src/rest.py --port=5000 -b", 'logs/hi0.log')
-    pid_file.write(str(pid1)+'\n')
-    print(pid1)
-    sleep(3.)
+    for i in range(num_nodes):
+        if i == 0:
+            #bootstrap...
+            pid = run(f"python ./src/rest.py --port={5000} -b", 'logs/id0.log')
+            pid_file.write(str(pid)+'\n')
+            print(pid)
+            sleep(3.)
+        else:
+            pid = run(f"python ./src/rest.py --port={5000+i}", f'logs/id{i}.log')
+            pid_file.write(str(pid)+'\n')
+            print(pid)
+            sleep(3.)
 
-    pid2 = run("python ./src/rest.py --port=5001", 'logs/hi2.log')
-    print(pid2)
-    pid_file.write(str(pid2)+'\n')
+    requests.post(f'http://127.0.0.1:{5000}/broadcast_peers')
     sleep(3.)
-
-    pid3 = run("python ./src/rest.py --port=5002", 'logs/hi3.log')
-    print(pid3)
-    pid_file.write(str(pid3)+'\n')
-    sleep(3.)
-
-    pid4 = run("python ./src/rest.py --port=5003", 'logs/hi4.log')
-    print(pid4)
-    pid_file.write(str(pid4)+'\n')
-    sleep(3.)
-
-    pid5 = run("python ./src/rest.py --port=5004", 'logs/hi5.log')
-    print(pid5)
-    pid_file.write(str(pid5)+'\n')
-    sleep(3.)
-
-    requests.post('http://127.0.0.1:5000/broadcast_peers')
-    sleep(1.)
     #make bootstrap start genesis...
-    requests.post('http://127.0.0.1:5000/genesis')
+    requests.post(f'http://127.0.0.1:{5000}/genesis')
+    sleep(3.)
+    #intitialize processings...
+    for i in range(num_nodes):
+        try:
+            requests.post(f'http://127.0.0.1:{5000+i}/processing', timeout=2.)
+        except:
+            print(f'processing active for node {i}')
+
 
 
 if __name__=="__main__":
     from argparse import ArgumentParser
+    from os import remove
+    from glob import glob
 
     parser = ArgumentParser()
     parser.add_argument('-stop', action='store_true',
@@ -78,8 +77,7 @@ if __name__=="__main__":
     if not args.stop:
         with open(PID_FILE, mode='w') as pid_file:
             #initialize all nodes and make genesis transactions!
-            init_nodes(pid_file, num_nodes=5)
-
+            init_nodes(pid_file, num_nodes=N)
 
     if args.stop:
         #stops all pids registered in PIDFILE
@@ -87,3 +85,6 @@ if __name__=="__main__":
         #clean the pid file...
         with open(PID_FILE,'w') as file:
             pass
+        #delete all id* files...
+        for f in glob("./logs/id*.log"):
+            remove(f) #remove all id.log files
