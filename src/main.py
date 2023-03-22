@@ -42,12 +42,12 @@ def init_nodes(pid_file, num_nodes = 5):
             #bootstrap...
             pid = run(f"python ./src/rest.py --port={5000} -b", 'logs/id0.log')
             pid_file.write(str(pid)+'\n')
-            print(pid)
+            print('Starting node using process: ', str(pid))
             sleep(3.)
         else:
             pid = run(f"python ./src/rest.py --port={5000+i}", f'logs/id{i}.log')
             pid_file.write(str(pid)+'\n')
-            print(pid)
+            print('Starting node using process: ', str(pid))
             sleep(3.)
 
     requests.post(f'http://127.0.0.1:{5000}/broadcast_peers')
@@ -69,17 +69,48 @@ if __name__=="__main__":
     from os import remove
     from glob import glob
 
-    parser = ArgumentParser()
+    parser = ArgumentParser(description='''main.py is used for initializing and dealing with NBC nodes''')
     parser.add_argument('-stop', action='store_true',
-                          help='Used for stopping all active rest processes!')
+                        help='Used for stopping all active rest processes!')
+    parser.add_argument('-t', action='store', type=float, nargs=3,
+                        help='Transaction made as: -t sender_id receiver_id amount')
+    parser.add_argument('-v', action='store', type=int, nargs=1,
+                        help='View transaction(s) in the last validated block of an id')
+    parser.add_argument('-b', action='store', type=int, nargs=1,
+                        help='Get balance of an id')
+    parser.add_argument('-tf', action='store_true',
+                        help='Use transaction files!')
     args = parser.parse_args()
-
+    
     if not args.stop:
-        with open(PID_FILE, mode='w') as pid_file:
-            #initialize all nodes and make genesis transactions!
-            init_nodes(pid_file, num_nodes=N)
-
-    if args.stop:
+        if (args.t is None) and (args.v is None) and (args.b is None):
+            with open(PID_FILE, mode='w') as pid_file:
+                #initialize all nodes and make genesis transactions!
+                init_nodes(pid_file, num_nodes=N)
+                if args.tf:
+                    #use transaction files!
+                    print('Will use transaction files...')
+                    #use N = 5 or 10 else raise...
+        else:
+            if not (args.t is None):
+                assert len(args.t) == 3
+                sender_id, receiver_id, amount = args.t
+                sender_id, receiver_id = int(sender_id), int(receiver_id)
+                requests.post(f'http://127.0.0.1:{5000+sender_id}/new_transaction',
+                            json={'id':str(receiver_id), 'amount': amount})
+            elif not (args.v is None):
+                assert len(args.v) == 1
+                sender_id = args.v.pop(0)
+                answer = requests.get(f'http://127.0.0.1:{5000+sender_id}/view')
+                print('\n'.join(answer.json()))
+            elif not (args.b is None):
+                assert len(args.b) == 1
+                sender_id = args.b.pop(0)
+                answer = requests.get(f'http://127.0.0.1:{5000+sender_id}/balance')
+                print(answer.json())
+            else:
+                print('Something wrong happened, only one command at a time...')
+    else:
         #stops all pids registered in PIDFILE
         stop()
         #clean the pid file...

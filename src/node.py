@@ -11,7 +11,7 @@ from time import sleep, time
 from utils import create_logger
 
 logger = create_logger("node backend")
-
+#! what happens if consecutive blocks are received??? (maybe nothing...)
 class node:
     #TODO Calculate throughtput and blocktime
     #TODO also add ip of node!
@@ -375,6 +375,9 @@ class node:
                 self.wallet.update(received_block)
                 # delete pending txns that are used in the block!!!
                 self.update_pending_txns(received_block) #change the pending txns...
+                logger.info('removing rest of incoming blocks...(if they exist)')
+                #emptying all the rest received blocks...
+                self.received_blocks = []
                 logger.info('restarting session to deal with other pending txns...')
                 return self.processing() #call this again to deal with more of the pending if any left...
             else:

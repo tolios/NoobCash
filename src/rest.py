@@ -105,11 +105,6 @@ def new_transaction():
         return 'failed to broadcast', 500
     logger.info("Appending to pending txns")
     app_node.pending_txns.append({"transaction": tx, "signature": signature}) #pending tx
-    #decides if it should call the processing functionality
-    # if not app_node.active_processing:
-    #     logger.info('Calling processing endpoint!')
-    #     #call the processing endpoint! 
-    #     requests.post(f'http://{app_node.ip}:{app_node.port}/processing')
     return 'transaction added and broadcasted!!!', 200
 
 @app.route("/receive_transaction", methods = ["POST"])
@@ -122,11 +117,6 @@ def receive_transaction():
     #     return 'transaction not valid', 200
     logger.info("Appending to pending txns")
     app_node.pending_txns.append({"transaction": tx, "signature": signature}) #pending tx
-    #decides if it should call the processing functionality
-    # if not app_node.active_processing:
-    #     logger.info('Calling processing endpoint!')
-    #     #call the processing endpoint! 
-    #     requests.post(f'http://{app_node.ip}:{app_node.port}/processing')
     return 'received transaction!', 200
 
 @app.route("/receive_block", methods = ["POST"])
@@ -137,11 +127,6 @@ def receive_block():
     logger.info('block received ...')
     #add received block in memory
     app_node.received_blocks.append(received_block)
-    # #if not processing, it should activate the processing endpoint...
-    # if not app_node.active_processing:
-    #     logger.info('Calling processing endpoint!')
-    #     #call the processing endpoint! 
-    #     requests.post(f'http://{app_node.ip}:{app_node.port}/processing')
     return 'received block!', 200
 
 @app.route("/blockchain", methods = ["GET"])
@@ -179,11 +164,21 @@ def balance():
 def get_wallet():
     return app_node.wallet.get_dict()
 
+###############METRICS#################
+
+@app.route("/throughput")
+def get_throughput():
+    # Number of transactions satisfied per time...
+    pass
+
+@app.route("/block_time")
+def get_block_time():
+    # Average time to add a block to blockchain...
+    pass
+
 if not args.b:
     #all other nodes post on bootstrap...
     details = {"ip": app_node.ip, "port": app_node.port, "address": app_node.wallet.public_key}
     requests.post('http://127.0.0.1:5000/connect', json=details)
-else:
-    pass
 
 app.run(host = args.ip, port = args.port)
