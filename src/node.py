@@ -25,7 +25,6 @@ class node:
         self.port = port
         self.wallet = Wallet(**wallet) if wallet else self.create_wallet() 
         self.blockchain = blockchain(**chain)
-        self.blockchain
         self.peers = peers
         self.ip = ip
         self.bootstrap = bootstrap
@@ -353,18 +352,23 @@ class node:
                 split += 1
             else:
                 break
+        logger.info(f'found split at {split}')
         if split == -1:
+            logger.info(f'found split at {split}')
             raise ValueError("Erroneous new chain!!!")
         #start reversing, keeping reversed transactions
         logger.info('unzipping...')
         reversed_txns = [] 
-        limit = len(old_block) -split -1
+        limit = len(self.blockchain) -split -1
         for i, old_block in enumerate(reversed(self.blockchain)):
             if i == limit:
+                logger.info('stopped rolling back...')
                 break
             else:  #! could have an error...
                 #start rolling back transactions
                 reversed_txns = self.wallet.rollback(old_block) + reversed_txns
+                #pop out block from blockchain...
+                self.blockchain.trim()
         #update pending with old... (correct order!)
         logger.info('zip to new...')
         self.pending_txns = reversed_txns + self.pending_txns
@@ -373,7 +377,12 @@ class node:
             if i <= split:
                 continue #do nothing before we cross the split...
             #update wallet!!!
-            self.wallet.update(new_block)
+            try:
+                print(self.validate_block(new_block))
+                self.wallet.update(new_block)
+                self.blockchain.append(new_block)
+            except:
+                logger.info('error of new block')
             # delete pending txns that are used in the block!!!
             self.update_pending_txns(new_block) #change the pending txns...
         
@@ -394,8 +403,6 @@ class node:
         #therefore we have acquired new chain...
         new_chain = blockchain(**max_chain)
         self.unzipnzip(new_chain) #unzip from old and zip to new chain...
-        #update to new chain...
-        self.blockchain = new_chain
 
     def update_pending_txns(self, successful_block: block):
         #remove the satisfied transactions form the pending tx list!

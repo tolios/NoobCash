@@ -22,3 +22,6 @@ class blockchain:
                 'c_time' : self.c_time, 'dts': self.dts}
     def last_block(self):
         return self.blocks[-1]
+    def trim(self):
+        #removing last block...
+        return self.blocks.pop()

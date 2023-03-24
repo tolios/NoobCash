@@ -66,7 +66,7 @@ def init_nodes(pid_file, num_nodes = 5):
             requests.post(f'http://127.0.0.1:{5000+i}/processing', timeout=2.)
         except:
             print(f'processing active for node {i}')
-    sleep(1.)
+    sleep(5.)
 
 def tx_files(num_nodes = 5):
     #locate transaction files
