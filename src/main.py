@@ -84,7 +84,7 @@ def tx_files(num_nodes = 5):
                     txns[i].append([receiver_id, int(amount)])
     #having extracted all of them, we will generate randomly order of sending txns...
     order = [i for i in range(num_nodes)]
-    for i in tqdm(range(20), desc="transactions ..."):
+    for i in tqdm(range(100), desc="transactions ..."):
         #batch of transactions that will be send with a defined order
         for sender_id in order:
             #start post requests...
