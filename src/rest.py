@@ -7,7 +7,9 @@ from block import block
 from blockchain import blockchain
 from utils import create_logger
 from argparse import ArgumentParser
+from config import CAPACITY
 from time import sleep
+from config import N
 
 parser = ArgumentParser()
 parser.add_argument('--ip', default='127.0.0.1', type=str,
@@ -96,26 +98,16 @@ def genesis_block():
 def new_transaction():
     # a transaction is registered to the node!
     tx_details = request.get_json() #! will output error if not possible (should have try except)
-    address = app_node.peers[tx_details["id"]]["address"]
-    tx, signature = app_node.create_transaction(address, tx_details["amount"])
+    app_node.personal_txns.append(tx_details)
     logger.info(f'New transaction with receiver id {tx_details["id"]}, amount {tx_details["amount"]}')
-    #broadcast!
-    _, m = app_node.broadcast_transaction(tx, signature)
-    if m == 500: 
-        return 'failed to broadcast', 500
-    logger.info("Appending to pending txns")
-    app_node.pending_txns.append({"transaction": tx, "signature": signature}) #pending tx
-    return 'transaction added and broadcasted!!!', 200
+    return 'transaction added to personal!!!', 200
 
 @app.route("/receive_transaction", methods = ["POST"])
 def receive_transaction():
     logger.info('Receiving transaction...')
     tx_dict = request.get_json()
     tx, signature = transaction(**tx_dict['transaction']), tx_dict['signature']
-    # #validate transaction... Will happen later ...
-    # if not app_node.validate_transaction(tx, signature):
-    #     return 'transaction not valid', 200
-    logger.info("Appending to pending txns")
+    logger.info(f"Appending to pending txns, id {tx.transaction_id}")
     app_node.pending_txns.append({"transaction": tx, "signature": signature}) #pending tx
     return 'received transaction!', 200
 
@@ -168,13 +160,26 @@ def get_wallet():
 
 @app.route("/throughput")
 def get_throughput():
-    # Number of transactions satisfied per time...
-    pass
+    # Number of transactions (#of transactions) satisfied per time...
+    #ignore the first dt as it is for the genesis...
+    #len(blockchain) == #of blocks statisfied
+    # #of blocks satisfied times CAPACITY = #of transactions satisfied!
+    # len(app_node.blockchain) - 1 to remove genesis from calculation ...
+    dts = app_node.blockchain.dts[1:]
+    return {'throughput': (CAPACITY*(len(app_node.blockchain)-1))/sum(dts)} if len(dts) != 0 else {'throughput': None}
 
 @app.route("/block_time")
 def get_block_time():
     # Average time to add a block to blockchain...
-    pass
+    #ignore the first dt as it is for the genesis...
+    dts = app_node.blockchain.dts[1:]
+    return {'block_time': sum(dts)/len(dts)}  if len(dts) != 0 else {'block_time': None} #avg block update
+
+@app.route("/done")
+def is_done():
+    #checks if it has more personal_txns to serve...
+    #checks if it has not enough pending_txns to make a block...
+    return {'done': (len(app_node.personal_txns) == 0) and (len(app_node.pending_txns) < CAPACITY)}
 
 if not args.b:
     #all other nodes post on bootstrap...

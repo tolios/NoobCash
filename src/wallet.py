@@ -67,5 +67,16 @@ class Wallet:
     def rollback(self, block):
         #Goes back a block transformation.
         #the exact opposite of update!
-        raise NotImplemented
+        #returns transactions that have been reversed! (future pending)
+        reversed = []
+        for transaction_dict in block.transactions:
+            transaction = transaction_dict['transaction']
+            for tx_input in transaction.transaction_input:
+                #add the utxo and add it being spent
+                self.track_spent(tx_input.id, transaction.transaction_id)
+                self.add_utxo(tx_input)
+            for tx_output in transaction.transaction_output:
+                self.remove_utxo(tx_output)
+            reversed.append(transaction_dict)
+        return reversed
 

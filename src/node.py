@@ -11,26 +11,25 @@ from time import sleep, time
 from utils import create_logger
 
 logger = create_logger("node backend")
-#! what happens if consecutive blocks are received??? (maybe nothing...)
+
 class node:
-    #TODO Calculate throughtput and blocktime
-    #TODO also add ip of node!
-    #TODO what happens if same utxo same transaction id. Is it exploitable. If in the same block two transactions same id same utxo!
     '''
         Node should be thought of as the backend...
     '''
     def __init__(self, id = None, ip = '127.0.0.1', port = "5000", 
                 peers = {}, wallet = None, chain = dict(), bootstrap = False, 
-                pending_txns = [], received_blocks = [], active_processing = False):
+                personal_txns = [], pending_txns = [], received_blocks = [], active_processing = False):
         logger.info("initializing ...")
         self.id = id
         self.ip = ip
         self.port = port
         self.wallet = Wallet(**wallet) if wallet else self.create_wallet() 
         self.blockchain = blockchain(**chain)
+        self.blockchain
         self.peers = peers
         self.ip = ip
         self.bootstrap = bootstrap
+        self.personal_txns = personal_txns #contains personal tx instructions, will happen after a block is added to the chain! (need utxos)
         self.pending_txns = [{"transaction":transaction(**tx_dict["transaction"]), "signature": tx_dict["signature"]} \
                         for tx_dict in pending_txns] #expects transaction dicts (with signatures!) changes to transaction obj
         self.received_blocks = [block(**block_dict) for block_dict in received_blocks]
@@ -56,6 +55,7 @@ class node:
             "port": self.port,
             "public_key": self.wallet.public_key,
             "bootstrap": self.bootstrap,
+            "personal_txns": self.personal_txns,
             "pending_txns": [{"transaction": tx_dict["transaction"].get_dict(), "signature": tx_dict["signature"]} \
                             for tx_dict in self.pending_txns],
             "received_blocks": [bl.get_dict() for bl in self.received_blocks],
@@ -70,7 +70,7 @@ class node:
             relevant_peers[self.id] = {'ip': self.ip, 'port': self.port, 'address': self.wallet.public_key}          
             del relevant_peers[peer_id] #remove id of receiver (the receiver has it...)
             requests.post(f"http://{peer_details['ip']}:{peer_details['port']}/post_peers", json=relevant_peers)
-            sleep(3.)
+            sleep(0.1)
             requests.post(f"http://{peer_details['ip']}:{peer_details['port']}/set_id/{peer_id}") #set id of node!
 
     def get_dict(self):
@@ -82,15 +82,16 @@ class node:
             "chain": self.blockchain.get_dict(),
             "peers": self.peers,
             "bootstrap": bootstrap,
+            "personal_txns": self.personal_txns,
             "pending_txns": [{"transaction": tx_dict["transaction"].get_dict(), "signature": tx_dict["signature"]} \
                             for tx_dict in self.pending_txns],
             "received_blocks": [bl.get_dict() for bl in self.received_blocks],
             "active_processing": self.active_processing
         }
     
-    def genesis_utxos(self, entry_coins = 100):
+    def genesis_utxos(self, entry_coins: int = 100):
         #this method will only be used ONCE for the bootstrap node...
-        #Simply put, it will make N utxos, one for each node...
+        #Simply put, it will make (N-1)*100 utxos, one for each peer...
         #and put them to the wallet of the bootstrap node
         logger.info("Creating genesis utxos ...")
         if not self.bootstrap:
@@ -98,11 +99,12 @@ class node:
         for i in range(len(self.peers)): 
             #create utxos for each node for the bootstrap wallet...
             if i != (len(self.peers)-1):
-                self.wallet.add_utxo(utxo(id = str(uuid4().hex), tx_id='init', address=self.wallet.public_key, amount=entry_coins))
+                for _ in range(entry_coins):
+                    self.wallet.add_utxo(utxo(id = str(uuid4().hex), tx_id='init', address=self.wallet.public_key, amount=1.))
             else:
-                #for the last utxo!
-                #for the change to register to all nodes!
-                self.wallet.add_utxo(utxo(id = str(uuid4().hex), tx_id='init', address=self.wallet.public_key, amount=2*entry_coins))
+                # trick for the spare to register bootstraps utxos...
+                for _ in range(entry_coins):
+                    self.wallet.add_utxo(utxo(id = str(uuid4().hex), tx_id='init', address=self.wallet.public_key, amount=2.))
         return entry_coins
 
     def genesis_block(self):
@@ -111,7 +113,9 @@ class node:
         g_block = block(timestamp=int(time()))
         entry_coins = self.genesis_utxos()
         for peer_details in self.peers.values():
-            g_block.append(*self.create_transaction(peer_details['address'], entry_coins)) #tuple so *
+            #so as each begins with 100 utxos instead of one utxo of 100, would block if 5 nodes 10 capacity...
+            for _ in range(entry_coins):
+                g_block.append(*self.create_transaction(peer_details['address'], 1.)) #tuple so *
         return g_block
     
     def register_peer(self, node_id, ip, port, address):
@@ -134,6 +138,7 @@ class node:
                 break
         #check if it doesn't have enough
         if total_amount < amount:
+            logger.info('not enough funds available...')
             raise ValueError("Not enough funds in wallet to complete transaction")
         #start the transaction!
         transaction_id = str(uuid4().hex)
@@ -168,6 +173,35 @@ class node:
             return 'Broadcast succeeded!', 200
         except:
             return 'Broadcast failed...', 500
+    
+    def personal_transaction(self):
+        '''
+            This method takes care of personal transactions...
+        Will create them if possible, and will broadcast them...
+
+        Return True if done, else ... False
+        '''
+        #if it has pending personal ...
+        if self.personal_txns:
+            tx_details = self.personal_txns.pop(0)
+            address = self.peers[tx_details["id"]]["address"]
+            #first checks if even possible...
+            if self.wallet.get_balance() < tx_details["amount"]:
+                logger.info('transaction impossible! Ignored...')
+                return True #we output true so as to move along. The transaction was just erroneous...
+            try:
+                tx, signature = self.create_transaction(address, tx_details["amount"])
+            except:
+                logger.info('transaction not possible...yet (enough funds but utxos are spent)')
+                self.personal_txns = [tx_details]+self.personal_txns #keeping it in memory...
+                return False
+            logger.info(f'Broadcasting tx with receiver id {tx_details["id"]}, amount {tx_details["amount"]}')
+            #broadcast!
+            self.broadcast_transaction(tx, signature)
+            logger.info("Appending to pending txns")
+            self.pending_txns.append({"transaction": tx, "signature": signature}) #pending tx
+            return True
+        return False #no personal txns...
         
     def validate_transaction(self, tx: transaction, signature: str)->bool:
         '''
@@ -258,23 +292,23 @@ class node:
         logger.info('validating block ...')
         if len(bl) != CAPACITY:
             return False, 'wrong capacity' #doesn't have the appropriate capacity
-        if self.blockchain.last_block().index + 1 != bl.index:
-            return False, 'wrong index' #not the next in line for the chain!
         if self.blockchain.last_block().hash() != bl.previous_block_hash:
             return False, 'wrong hash' #not the next in line for the chain!
+        if self.blockchain.last_block().index + 1 != bl.index:
+            return False, 'wrong index' #not the next in line for the chain!
         #check if valid proof
         if bl.hash()[:MINING_DIFFICULTY] != "0"*MINING_DIFFICULTY:
             return False, 'not mined' #not mined!
         #check if each transaction is valid...
         #also check if two transactions have the same id. This should be wrong especially in the block!
         used_txns = set()
-        for tx_dict in bl:
+        for num, tx_dict in enumerate(bl):
             tx = tx_dict['transaction']
             if tx.transaction_id in used_txns:
-                return False #wrong to have two transactions with the same id...
+                return False, ('2 same id', num) #wrong to have two transactions with the same id...
             used_txns.add(tx.transaction_id) #add transaction to the set...
             if not self.validate_transaction(tx, tx_dict['signature']):
-                return False, 'transaction invalidated' #transaction was invalidated so block is cancelled!
+                return False, ('transaction invalidated', num) #transaction was invalidated so block is cancelled!
         return True, 'passed' #all checks passed! (plus transaction utxos tracked...)
     
     def mine_block(self, bl: block, limit = 1e10):
@@ -305,28 +339,64 @@ class node:
         except:
             return 'Broadcast failed...', 500
 
-    def validate_chain(self, chain: blockchain): #newcomers only...
-        #check if wallet is empty (it should be because newcomer!)
-        if self.wallet:
-            #since nonempty, raise
-            raise ValueError("Not a newcomer!")
-        #now the way to validate the chain is to validate each block and update the history!
-        #therefore it must gain the knowledge of the other wallets! (utxo possesions etc...)
-        genesis = True
-        for bl in chain:
-            if not genesis:
-                #validate all other blocks!
-                if not self.validate_block(bl):
-                    return False
+    def unzipnzip(self, new_chain: blockchain): 
+        '''
+            Given our new chain, we need to unzip our previous chain,
+        then zip the new chain, while tracking all the pending transactions.
+        '''
+        #first we need to find where the chains splitted!
+        split = -1
+        logger.info('finding split...')
+        for new_block, old_block in zip(new_chain, self.blockchain):
+            #we check if the same...
+            if new_block.hash() == old_block.hash():
+                split += 1
             else:
-                genesis = False #only one genesis block
-            self.wallet.update(bl) #will update wallet
-        return True #if returns True, then chain is validated, wallet up to date...
-
+                break
+        if split == -1:
+            raise ValueError("Erroneous new chain!!!")
+        #start reversing, keeping reversed transactions
+        logger.info('unzipping...')
+        reversed_txns = [] 
+        limit = len(old_block) -split -1
+        for i, old_block in enumerate(reversed(self.blockchain)):
+            if i == limit:
+                break
+            else:  #! could have an error...
+                #start rolling back transactions
+                reversed_txns = self.wallet.rollback(old_block) + reversed_txns
+        #update pending with old... (correct order!)
+        logger.info('zip to new...')
+        self.pending_txns = reversed_txns + self.pending_txns
+        #zip new chain...
+        for i, new_block in enumerate(new_chain):
+            if i <= split:
+                continue #do nothing before we cross the split...
+            #update wallet!!!
+            self.wallet.update(new_block)
+            # delete pending txns that are used in the block!!!
+            self.update_pending_txns(new_block) #change the pending txns...
+        
     def resolve_conflict(self):
         #iterates all peers, picks longest chain!
-        raise NotImplemented #will use something else than validate chain! (probably)
-    
+        max_len, max_chain, max_id = -1, None, -1
+        for peer_id in self.peers:
+            logger.info('searching chain...')
+            chain_dict = requests.get(f'http://127.0.0.1:{5000+int(peer_id)}/blockchain').json()
+            new_len = len(chain_dict['blocks'])
+            if new_len > max_len:
+                max_len, max_chain, max_id = new_len, chain_dict, peer_id
+        if max_len <= len(self.blockchain):
+            #we have the biggest blockchain...
+            logger.info('already has the biggest chain...')
+            return None
+        logger.info(f'adopting chain of id {max_id}')
+        #therefore we have acquired new chain...
+        new_chain = blockchain(**max_chain)
+        self.unzipnzip(new_chain) #unzip from old and zip to new chain...
+        #update to new chain...
+        self.blockchain = new_chain
+
     def update_pending_txns(self, successful_block: block):
         #remove the satisfied transactions form the pending tx list!
         logger.info('updating pending transactions...')
@@ -383,19 +453,29 @@ class node:
             else:
                 logger.info('block invalidated!')
                 #clean state!!! nothing or chain!
-                if reason == 'transaction invalidated':
+                if (reason[0] == 'transaction invalidated') or (reason[0] == '2 same id'):
                     logger.info('a transaction was invalidated!')
-                    #nothing to do, restart process having removed the received_block
-                    #! need to ignore txns that are included in the block but not in the pending...
+                    num = reason[1] #have been validated...
+                    self.cleanup(received_block.transactions[:num])
+                    #nothing to do, restart process having removed the received_block validated txns
                     return self.processing()
                 elif reason == 'wrong hash':
                     #if we have wrong hash ... need to ask for chain
                     logger.info('wrong hash... asking for longest chain...')
-                    self.resolve_conflict()
+                    self.resolve_conflict() #find longest valid chain... unzipnzip ...
+                    return self.processing()
                 else:
                     #simply start new processing session! Having removed simply invalid block...
+                    logger.info(f'Reason of invalidation: {str(reason)}')
                     logger.info('restarting session to deal with other pending txns...')
                     return self.processing()
+        
+        #Try to create personal transaction & add to pending_txns ...
+        personal = True
+        while personal:
+            personal = self.personal_transaction()
+            if personal:
+                logger.info('...')
                 
         if len(self.pending_txns) >= CAPACITY: #make block ... if appropriate
             logger.info('start validating pending txns...')
@@ -485,7 +565,7 @@ class node:
         Loop stops if we set self.active_processing to False...
         '''
         while self.active_processing:
-            sleep(1.) #giving it a small rythm...
+            sleep(0.1) #giving it a small rythm...
             _ = self.processing()
         logger.info('processing stops!')
 
