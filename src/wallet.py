@@ -79,4 +79,3 @@ class Wallet:
                 self.remove_utxo(tx_output)
             reversed.append(transaction_dict)
         return reversed
-

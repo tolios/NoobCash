@@ -31,15 +31,3 @@ class utxo:
             'address': self.address,
             'amount': self.amount,
         })
-
-if __name__=="__main__":
-
-    utxo_dict = {
-        'tx_id': "ukdewhowi2",
-        'address': "i3uh22jd9i",
-        'amount': 10
-    }
-
-    utxo1 = utxo(**utxo_dict)
-
-    print(utxo1.get_dict())

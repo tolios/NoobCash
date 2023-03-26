@@ -10,3 +10,4 @@ example.json
 .vscode
 __pycache__
 logs/*.log
+!logs/pids.log

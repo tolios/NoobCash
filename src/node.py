@@ -80,7 +80,7 @@ class node:
             "wallet": self.wallet.get_dict(),
             "chain": self.blockchain.get_dict(),
             "peers": self.peers,
-            "bootstrap": bootstrap,
+            "bootstrap": self.bootstrap,
             "personal_txns": self.personal_txns,
             "pending_txns": [{"transaction": tx_dict["transaction"].get_dict(), "signature": tx_dict["signature"]} \
                             for tx_dict in self.pending_txns],
@@ -583,22 +583,3 @@ class node:
         private_key = keypair.export_key().decode("ISO-8859-1")
         public_key = keypair.publickey().export_key().decode("ISO-8859-1")
         return Wallet(public_key = public_key, private_key = private_key) #starts with no utxos
-
-if __name__=="__main__":
-    from json import dumps
-
-    bootstrap = node()
-
-    bootstrap.genesis_utxos()
-
-    print(bootstrap.wallet.spent)
-
-    tx, signature = bootstrap.create_transaction('22122e2', 11)
-
-    bl1 = bootstrap.create_new_block()
-
-    bl1.append(tx, signature)
-
-    #print(bootstrap.wallet.spent)
-
-    print(bl1.get_dict())

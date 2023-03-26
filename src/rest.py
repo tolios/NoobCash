@@ -152,10 +152,6 @@ def view():
 def balance():
     return {"balance": app_node.wallet.get_balance()}
 
-@app.route("/wallet", methods = ["GET"])
-def get_wallet():
-    return app_node.wallet.get_dict()
-
 ###############METRICS#################
 
 @app.route("/throughput")
